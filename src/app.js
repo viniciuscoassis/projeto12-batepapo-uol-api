@@ -44,6 +44,13 @@ app.post("/participants", async (req, res) => {
       .collection("participants")
       .insertOne({ name, lastStatus: Date.now() });
 
+    const resposta = await db.collection("messages").insertOne({
+      from: name,
+      to: "Todos",
+      text: "entra na sala...",
+      type: "status",
+      time: dayjs().format("HH:mm:ss"),
+    });
     return res.sendStatus(201);
   } catch (error) {
     res.sendStatus(500);
@@ -96,9 +103,39 @@ app.post("/messages", async (req, res) => {
 
 app.get("/messages", async (req, res) => {
   let messages = await db.collection("messages").find({}).toArray();
+
+  const { limit } = req.query;
+  const { user } = req.headers;
+
+  messages = messages.filter(
+    (value) =>
+      value.user == user ||
+      value.from == user ||
+      value.to == user ||
+      value.to == "Todos"
+  );
+
+  if (limit) {
+    return res.send(messages.splice(-limit));
+  }
   res.send(messages);
 });
 
-app.post("/status", (req, res) => {});
+app.post("/status", async (req, res) => {
+  const { user } = req.headers;
+
+  if (user.length == 0) {
+    res.sendStatus(404);
+  }
+
+  try {
+    const ansParticipant = await db
+      .collection("participants")
+      .find({ name: user })
+      .toArray();
+
+    res.send(ansParticipant);
+  } catch (erro) {}
+});
 
 app.listen(5000, () => console.log("listening on 5000"));
