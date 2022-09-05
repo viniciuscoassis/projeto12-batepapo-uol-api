@@ -3,7 +3,7 @@ import cors from "cors";
 import joi from "joi";
 import dayjs from "dayjs";
 import dotenv from "dotenv";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 dotenv.config();
 
@@ -123,19 +123,50 @@ app.get("/messages", async (req, res) => {
 
 app.post("/status", async (req, res) => {
   const { user } = req.headers;
-
+  let idTrocar, ansParticipant;
   if (user.length == 0) {
     res.sendStatus(404);
   }
 
   try {
-    const ansParticipant = await db
+    ansParticipant = await db
       .collection("participants")
-      .find({ name: user })
-      .toArray();
+      .findOne({ name: user });
 
-    res.send(ansParticipant);
-  } catch (erro) {}
+    idTrocar = ansParticipant._id;
+  } catch (erro) {
+    return res.status(500).send(erro.message);
+  }
+
+  try {
+    await db
+      .collection("participants")
+      .updateOne(
+        { _id: ObjectId(idTrocar) },
+        { $set: { ...ansParticipant, lastStatus: Date.now() } }
+      );
+    res.sendStatus(200);
+  } catch (error) {
+    return res.status(500).send(error.message);
+  }
 });
+
+setInterval(async () => {
+  const Participants = await db.collection("participants").find({}).toArray();
+
+  Participants.forEach(async (element) => {
+    if (Date.now() - element.lastStatus > 10000) {
+      await db.collection("participants").deleteOne({ name: element.name });
+
+      await db.collection("messages").insertOne({
+        from: element.name,
+        to: "Todos",
+        text: "sai da sala...",
+        type: "status",
+        time: dayjs().format("HH:mm:ss"),
+      });
+    }
+  });
+}, 15000);
 
 app.listen(5000, () => console.log("listening on 5000"));
